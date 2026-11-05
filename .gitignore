@@ -31,3 +31,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.freebuff
+.codex
+.claude
+.gemini
+.grok

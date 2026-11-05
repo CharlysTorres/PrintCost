@@ -1,14 +1,53 @@
-// @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
-// or the app will break with duplicate plugins:
-//   - TanStack devtools (dev-only, first), tanstackStart, viteReact, tailwindcss, tsConfigPaths,
-//     nitro (build-only using cloudflare as a default target), VITE_* env injection, @ path alias,
-//     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
-import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { fileURLToPath, URL } from "node:url";
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+import { VitePWA } from "vite-plugin-pwa";
 
+// PrintCost is a client-side SPA (no SSR), distributed as an installable PWA.
 export default defineConfig({
-  tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
-    server: { entry: "server" },
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
   },
+  plugins: [
+    tanstackRouter({ target: "react", autoCodeSplitting: true }),
+    react(),
+    tailwindcss(),
+    VitePWA({
+      registerType: "autoUpdate",
+      injectRegister: false,
+
+      pwaAssets: {
+        disabled: false,
+        config: true,
+      },
+
+      manifest: {
+        name: "PrintCost",
+        short_name: "PrintCost",
+        description:
+          "Precificação e faturamento de impressão 3D em filamento e resina.",
+        theme_color: "#ffffff",
+        lang: "pt-BR",
+        start_url: "/",
+      },
+
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        navigateFallback: "index.html",
+      },
+
+      devOptions: {
+        enabled: false,
+        navigateFallback: "index.html",
+        suppressWarnings: true,
+        type: "module",
+      },
+    }),
+  ],
 });

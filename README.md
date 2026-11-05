@@ -26,12 +26,13 @@ A aplicação inclui as seguintes telas:
 
 ## Tecnologias
 
-- **TanStack Start** - Framework React para SSR e roteamento
+- **TanStack Router** - Roteamento client-side tipado (SPA, sem SSR)
 - **TypeScript** - Tipagem estática completa
 - **React** - Interface interativa
 - **Tailwind CSS** - Estilização utilitária
 - **Supabase** - Backend e autenticação Google
 - **Vite** - Build tool e dev server
+- **PWA (vite-plugin-pwa)** - Instalável e funcional offline via service worker
 
 ## Desenvolvimento
 
@@ -63,6 +64,7 @@ npm run preview
 ## Autenticação
 
 Para usar o login Google, configure o Supabase:
+
 1. Defina as chaves no arquivo `.env`:
    - `VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co`
    - `VITE_SUPABASE_ANON_KEY=sua-chave-anon-publica`
