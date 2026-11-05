@@ -1,0 +1,12 @@
+{
+  "host": {
+    "public": "dist",
+    "singlePageApp": "index.html",
+    "rewrites": [
+      {
+        "source": "**",
+        "function": "ssr"
+      }
+    ]
+  }
+}
