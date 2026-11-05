@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format, parseISO, subDays } from "date-fns";
 import { toast } from "sonner";
-import { Download, Receipt, Search, Trash2 } from "lucide-react";
+import { Download, Receipt, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,30 +52,71 @@ export const Route = createFileRoute("/pedidos")({
 });
 
 function OrdersPage() {
-  const { orders, setOrders, ready } = useStore();
+  const {
+    orders,
+    setOrders,
+    ready,
+    publicOrders,
+    refreshPublicOrders,
+    changePublicOrderStatus,
+    removePublicOrder,
+  } = useStore();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [period, setPeriod] = useState<string>("all");
 
+  useEffect(() => {
+    void refreshPublicOrders();
+  }, [refreshPublicOrders]);
+
   const list = useMemo(() => {
     const since = period === "all" ? null : subDays(new Date(), Number(period));
-    return [...orders]
+    const term = q.toLowerCase();
+    return [...orders, ...publicOrders]
       .filter(
         (o) =>
           (status === "all" || o.status === status) &&
-          o.client.toLowerCase().includes(q.toLowerCase()) &&
+          [o.client, o.piece, o.customerEmail, o.customerPhone]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(term) &&
           (!since || parseISO(o.date) >= since),
       )
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [orders, q, status, period]);
+  }, [orders, publicOrders, q, status, period]);
 
-  const changeStatus = (id: string, s: OrderStatus) => {
+  const changeStatus = (id: string, s: OrderStatus, fromStore: boolean) => {
+    if (fromStore) {
+      void changePublicOrderStatus(id, s)
+        .then(() =>
+          toast.success(
+            s === "Entregue"
+              ? "Pedido entregue — contabilizado no faturamento"
+              : `Status alterado para ${s}`,
+          ),
+        )
+        .catch(() => toast.error("Não foi possível atualizar o pedido"));
+      return;
+    }
     setOrders((l) => l.map((o) => (o.id === id ? { ...o, status: s } : o)));
     toast.success(
       s === "Entregue"
         ? "Pedido entregue — contabilizado no faturamento"
         : `Status alterado para ${s}`,
     );
+  };
+
+  const removeOrder = (id: string, fromStore: boolean) => {
+    const done = () => toast.success("Pedido excluído");
+    if (fromStore) {
+      void removePublicOrder(id)
+        .then(done)
+        .catch(() => toast.error("Não foi possível excluir o pedido"));
+      return;
+    }
+    setOrders((l) => l.filter((x) => x.id !== id));
+    done();
   };
 
   const exportCsv = () => {
@@ -90,6 +131,9 @@ function OrdersPage() {
         "Preço",
         "Lucro",
         "Status",
+        "E-mail",
+        "Celular",
+        "Quantidade",
       ],
       ...list.map((o) => [
         o.client,
@@ -100,6 +144,9 @@ function OrdersPage() {
         o.price.toFixed(2),
         o.profit.toFixed(2),
         o.status,
+        o.customerEmail ?? "",
+        o.customerPhone ?? "",
+        o.quantity ?? "",
       ]),
     ];
     const blob = new Blob(
@@ -119,10 +166,23 @@ function OrdersPage() {
         title="Pedidos"
         description="Somente pedidos entregues entram no faturamento."
         action={
-          <Button variant="outline" onClick={exportCsv} disabled={!list.length}>
-            <Download className="h-4 w-4" />
-            Exportar CSV
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void refreshPublicOrders()}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Atualizar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportCsv}
+              disabled={!list.length}
+            >
+              <Download className="h-4 w-4" />
+              Exportar CSV
+            </Button>
+          </div>
         }
       />
 
@@ -130,7 +190,7 @@ function OrdersPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por cliente…"
+            placeholder="Buscar por cliente, e-mail ou produto…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="pl-9"
@@ -198,6 +258,11 @@ function OrdersPage() {
                   <TableCell>
                     <div className="flex items-center gap-1.5 font-medium">
                       {o.client}
+                      {o.source === "loja" && (
+                        <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
+                          Loja
+                        </span>
+                      )}
                       {o.technology === "Resina" && (
                         <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
                           Resina
@@ -210,6 +275,13 @@ function OrdersPage() {
                         ? ` · ${o.volumeMl} ml`
                         : ""}
                     </div>
+                    {(o.customerEmail || o.customerPhone) && (
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {[o.customerEmail, o.customerPhone]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="hidden md:table-cell tabular text-muted-foreground">
                     {format(parseISO(o.date), "dd/MM/yyyy")}
@@ -218,15 +290,15 @@ function OrdersPage() {
                     {formatHours(o.printMinutes)}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell text-right tabular">
-                    {formatBRL(o.cost)}
+                    {o.source === "loja" ? "—" : formatBRL(o.cost)}
                   </TableCell>
                   <TableCell className="text-right tabular">
                     {formatBRL(o.price)}
                   </TableCell>
                   <TableCell
-                    className={`text-right tabular font-medium ${o.profit >= 0 ? "text-success" : "text-destructive"}`}
+                    className={`text-right tabular font-medium ${o.source === "loja" ? "text-muted-foreground" : o.profit >= 0 ? "text-success" : "text-destructive"}`}
                   >
-                    {formatBRL(o.profit)}
+                    {o.source === "loja" ? "—" : formatBRL(o.profit)}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -237,7 +309,9 @@ function OrdersPage() {
                         {STATUSES.map((s) => (
                           <DropdownMenuItem
                             key={s}
-                            onClick={() => changeStatus(o.id, s)}
+                            onClick={() =>
+                              changeStatus(o.id, s, o.source === "loja")
+                            }
                           >
                             {s}
                           </DropdownMenuItem>
@@ -250,10 +324,7 @@ function OrdersPage() {
                       variant="ghost"
                       size="icon"
                       aria-label="Excluir"
-                      onClick={() => {
-                        setOrders((l) => l.filter((x) => x.id !== o.id));
-                        toast.success("Pedido excluído");
-                      }}
+                      onClick={() => removeOrder(o.id, o.source === "loja")}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

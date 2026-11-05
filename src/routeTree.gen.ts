@@ -17,7 +17,9 @@ import { Route as ImpressorasRouteImport } from './routes/impressoras'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PedidosRouteImport } from './routes/pedidos'
 import { Route as PerfilRouteImport } from './routes/perfil'
+import { Route as ProdutosRouteImport } from './routes/produtos'
 import { Route as ResinasRouteImport } from './routes/resinas'
+import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -59,9 +61,19 @@ const PerfilRoute = PerfilRouteImport.update({
   path: '/perfil',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProdutosRoute = ProdutosRouteImport.update({
+  id: '/produtos',
+  path: '/produtos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResinasRoute = ResinasRouteImport.update({
   id: '/resinas',
   path: '/resinas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LojaSlugRoute = LojaSlugRouteImport.update({
+  id: '/loja/$slug',
+  path: '/loja/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -74,7 +86,9 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
+  '/produtos': typeof ProdutosRoute
   '/resinas': typeof ResinasRoute
+  '/loja/$slug': typeof LojaSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -85,7 +99,9 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
+  '/produtos': typeof ProdutosRoute
   '/resinas': typeof ResinasRoute
+  '/loja/$slug': typeof LojaSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -97,7 +113,9 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
+  '/produtos': typeof ProdutosRoute
   '/resinas': typeof ResinasRoute
+  '/loja/$slug': typeof LojaSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -110,7 +128,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/pedidos'
     | '/perfil'
+    | '/produtos'
     | '/resinas'
+    | '/loja/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -121,7 +141,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/pedidos'
     | '/perfil'
+    | '/produtos'
     | '/resinas'
+    | '/loja/$slug'
   id:
     | '__root__'
     | '/'
@@ -132,7 +154,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/pedidos'
     | '/perfil'
+    | '/produtos'
     | '/resinas'
+    | '/loja/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -144,7 +168,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PedidosRoute: typeof PedidosRoute
   PerfilRoute: typeof PerfilRoute
+  ProdutosRoute: typeof ProdutosRoute
   ResinasRoute: typeof ResinasRoute
+  LojaSlugRoute: typeof LojaSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -205,11 +231,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PerfilRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/produtos': {
+      id: '/produtos'
+      path: '/produtos'
+      fullPath: '/produtos'
+      preLoaderRoute: typeof ProdutosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/resinas': {
       id: '/resinas'
       path: '/resinas'
       fullPath: '/resinas'
       preLoaderRoute: typeof ResinasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/loja/$slug': {
+      id: '/loja/$slug'
+      path: '/loja/$slug'
+      fullPath: '/loja/$slug'
+      preLoaderRoute: typeof LojaSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -224,7 +264,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PedidosRoute: PedidosRoute,
   PerfilRoute: PerfilRoute,
+  ProdutosRoute: ProdutosRoute,
   ResinasRoute: ResinasRoute,
+  LojaSlugRoute: LojaSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

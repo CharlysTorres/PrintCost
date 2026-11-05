@@ -8,6 +8,7 @@ import {
   LogOut,
   Menu,
   Moon,
+  Package,
   Printer,
   Receipt,
   Settings,
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/calculadora", label: "Calculadora", icon: Calculator },
+  { to: "/produtos", label: "Produtos", icon: Package },
   { to: "/filamentos", label: "Filamentos", icon: Box },
   { to: "/resinas", label: "Resinas", icon: FlaskConical },
   { to: "/impressoras", label: "Impressoras", icon: Printer },

@@ -14,6 +14,13 @@ import {
   pushRemoteState,
   subscribeToRemoteState,
 } from "./sync";
+import {
+  deleteStoreOrder,
+  fetchStoreOrders,
+  pushStorefront,
+  storeOrderToOrder,
+  updateStoreOrderStatus,
+} from "./storefront";
 
 export type Material = "PLA" | "PETG" | "ABS" | "TPU" | "Resina";
 export const MATERIALS: Material[] = ["PLA", "PETG", "ABS", "TPU", "Resina"];
@@ -90,6 +97,47 @@ export interface Order {
   profit: number;
   status: OrderStatus;
   breakdown: CostBreakdown;
+  /** Pedidos feitos pela loja pública guardam o contato do cliente. */
+  source?: "loja";
+  customerEmail?: string;
+  customerPhone?: string;
+  quantity?: number;
+  variation?: string;
+}
+
+export interface Product {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  quantity: number;
+  /** Nome da variação, ex.: "Cor" ou "Tamanho". */
+  variationName: string;
+  variations: string[];
+  /** URL ou data URL da imagem. */
+  image: string;
+  createdAt: string;
+}
+
+export interface StoreSettings {
+  name: string;
+  slug: string;
+}
+
+export const defaultStore: StoreSettings = { name: "", slug: "" };
+
+export function slugify(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
+export function isValidSlug(value: string): boolean {
+  return /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(value);
 }
 export interface Settings {
   energyRate: number;
@@ -113,6 +161,8 @@ interface Data {
   printers: Printer[];
   orders: Order[];
   settings: Settings;
+  products: Product[];
+  store: StoreSettings;
 }
 
 export const defaultSettings: Settings = {
@@ -305,7 +355,15 @@ function seed(): Data {
       breakdown: { filament, energy, machine, labor, fees },
     };
   });
-  return { filaments, resins, printers, orders, settings: defaultSettings };
+  return {
+    filaments,
+    resins,
+    printers,
+    orders,
+    settings: defaultSettings,
+    products: [],
+    store: defaultStore,
+  };
 }
 
 const KEY = "printcost:data:v1";
@@ -319,6 +377,13 @@ interface Store extends Data {
   setPrinters: (f: (prev: Printer[]) => Printer[]) => void;
   setOrders: (f: (prev: Order[]) => Order[]) => void;
   setSettings: (s: Settings) => void;
+  setProducts: (f: (prev: Product[]) => Product[]) => void;
+  setStore: (s: StoreSettings) => void;
+  /** Pedidos recebidos pela loja pública (somente leitura local, vêm do Supabase). */
+  publicOrders: Order[];
+  refreshPublicOrders: () => Promise<void>;
+  changePublicOrderStatus: (id: string, status: OrderStatus) => Promise<void>;
+  removePublicOrder: (id: string) => Promise<void>;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -334,6 +399,13 @@ function normalize(parsed: Partial<Data>): Data {
     })),
     orders: parsed.orders ?? [],
     settings: { ...defaultSettings, ...parsed.settings },
+    products: (parsed.products ?? []).map((p) => ({
+      ...p,
+      variationName: p.variationName ?? "",
+      variations: p.variations ?? [],
+      image: p.image ?? "",
+    })),
+    store: { ...defaultStore, ...parsed.store },
   };
 }
 
@@ -358,6 +430,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const userId = configured ? user?.id : undefined;
   const [data, setData] = useState<Data | null>(null);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+  const [publicOrders, setPublicOrders] = useState<Order[]>([]);
   const dataRef = useRef<Data | null>(null);
   const remoteAppliedRef = useRef<string | null>(null);
 
@@ -435,6 +508,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [configured, data, hydratedFor, userId]);
 
+  // Espelha produtos e nome da loja na vitrine pública usada pelo link.
+  useEffect(() => {
+    if (!configured || !userId || hydratedFor !== userId || !data) return;
+    const { store, products } = data;
+    if (!store.slug) return;
+    const timer = setTimeout(() => {
+      void pushStorefront(userId, {
+        name: store.name,
+        slug: store.slug,
+        products,
+      }).catch((err) => console.warn("Falha ao publicar a loja", err));
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [configured, data, hydratedFor, userId]);
+
+  const refreshPublicOrders = useCallback(async () => {
+    if (!configured || !userId) {
+      setPublicOrders([]);
+      return;
+    }
+    try {
+      const rows = await fetchStoreOrders(userId);
+      setPublicOrders(rows.map(storeOrderToOrder));
+    } catch (err) {
+      console.warn("Falha ao carregar pedidos da loja", err);
+    }
+  }, [configured, userId]);
+
+  useEffect(() => {
+    if (!userId || hydratedFor !== userId) return;
+    void refreshPublicOrders();
+  }, [hydratedFor, userId, refreshPublicOrders]);
+
+  const changePublicOrderStatus = useCallback(
+    async (id: string, status: OrderStatus) => {
+      await updateStoreOrderStatus(id, status);
+      setPublicOrders((list) =>
+        list.map((o) => (o.id === id ? { ...o, status } : o)),
+      );
+    },
+    [],
+  );
+
+  const removePublicOrder = useCallback(async (id: string) => {
+    await deleteStoreOrder(id);
+    setPublicOrders((list) => list.filter((o) => o.id !== id));
+  }, []);
+
   // Tempo real: outro dispositivo/aba alterou o documento do usuário.
   useEffect(() => {
     if (!configured || !userId || hydratedFor !== userId) return;
@@ -463,15 +584,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     printers: [],
     orders: [],
     settings: defaultSettings,
+    products: [],
+    store: defaultStore,
   };
   const value: Store = {
     ...d,
     ready: !!data,
+    publicOrders,
     setFilaments: (f) => upd("filaments", f),
     setResins: (f) => upd("resins", f),
     setPrinters: (f) => upd("printers", f),
     setOrders: (f) => upd("orders", f),
     setSettings: (s) => upd("settings", () => s),
+    setProducts: (f) => upd("products", f),
+    setStore: (s) => upd("store", () => s),
+    refreshPublicOrders,
+    changePublicOrderStatus,
+    removePublicOrder,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

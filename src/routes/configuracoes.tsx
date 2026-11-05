@@ -1,18 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { LogOut, UserRound } from "lucide-react";
+import { Copy, ExternalLink, LogOut, Store, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/AppShell";
 import { FF } from "@/components/FormField";
-import { useStore } from "@/lib/store";
+import {
+  isValidSlug,
+  slugify,
+  useStore,
+  type StoreSettings,
+} from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { isSlugTaken, pushStorefront } from "@/lib/storefront";
 import { initialsOf, userAvatar, userName } from "@/lib/profile";
 
 export const Route = createFileRoute("/configuracoes")({
@@ -132,6 +138,158 @@ function AccountCard() {
   );
 }
 
+function StoreCard() {
+  const { store, setStore, ready, products } = useStore();
+  const { configured, user } = useAuth();
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!ready) return;
+    setName(store.name);
+    setSlug(store.slug);
+  }, [ready, store.name, store.slug]);
+
+  const publicUrl =
+    slug && typeof window !== "undefined"
+      ? `${window.location.origin}/loja/${slug}`
+      : "";
+
+  const save = async () => {
+    const cleanName = name.trim();
+    const cleanSlug = slugify(slug);
+    if (!cleanName) {
+      toast.error("Dê um nome para a loja");
+      return;
+    }
+    if (!isValidSlug(cleanSlug)) {
+      toast.error("Use de 3 a 40 letras, números ou hífens no link");
+      return;
+    }
+
+    if (configured && user) {
+      setSaving(true);
+      try {
+        if (await isSlugTaken(cleanSlug, user.id)) {
+          toast.error("Este link já está em uso por outra loja");
+          return;
+        }
+        await pushStorefront(user.id, {
+          name: cleanName,
+          slug: cleanSlug,
+          products,
+        });
+      } catch {
+        toast.error(
+          "Não foi possível publicar a loja. Confira o Supabase e aplique o supabase/schema.sql.",
+        );
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    const next: StoreSettings = { name: cleanName, slug: cleanSlug };
+    setStore(next);
+    setSlug(cleanSlug);
+    toast.success("Loja pública atualizada");
+  };
+
+  return (
+    <Card className="mt-6 rounded-xl shadow-soft">
+      <CardContent className="p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <Store className="h-4 w-4 text-muted-foreground" />
+          <h2 className="font-semibold">Loja pública</h2>
+        </div>
+        <p className="mb-5 text-sm text-muted-foreground">
+          Escolha o nome da loja e o link que os clientes vão acessar para ver
+          seus produtos e fazer pedidos.
+        </p>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <FF label="Nome da loja">
+            <Input
+              value={name}
+              maxLength={60}
+              placeholder="Ex.: Ateliê 3D"
+              onChange={(ev) => setName(ev.target.value)}
+            />
+          </FF>
+          <FF label="Link da loja">
+            <div className="flex items-center rounded-md border bg-background focus-within:ring-1 focus-within:ring-ring">
+              <span className="pl-3 text-sm text-muted-foreground">/loja/</span>
+              <Input
+                value={slug}
+                maxLength={40}
+                placeholder="atelie-3d"
+                className="border-0 shadow-none focus-visible:ring-0"
+                onChange={(ev) => setSlug(slugify(ev.target.value))}
+              />
+            </div>
+          </FF>
+        </div>
+
+        {publicUrl && (
+          <div className="mt-4 rounded-lg border bg-muted/40 p-3">
+            <div className="text-xs text-muted-foreground">Link público</div>
+            <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <a
+                href={publicUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="min-w-0 flex-1 truncate text-sm font-medium text-primary hover:underline"
+              >
+                {publicUrl}
+              </a>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(publicUrl)
+                      .then(() => toast.success("Link copiado"))
+                      .catch(() => toast.error("Não foi possível copiar"));
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                  Copiar
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <a href={publicUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4" />
+                    Abrir
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!configured && (
+          <p className="mt-4 text-xs text-warning">
+            O link público exige o Supabase configurado e o schema.sql aplicado.
+          </p>
+        )}
+
+        <div className="mt-5 flex items-center gap-3">
+          <Button type="button" onClick={() => void save()} disabled={saving}>
+            Salvar loja
+          </Button>
+          <Link
+            to="/produtos"
+            className="text-sm text-muted-foreground hover:underline"
+          >
+            Gerenciar produtos
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SettingsPage() {
   const { settings, setSettings, ready } = useStore();
   const form = useForm<V>({
@@ -174,6 +332,7 @@ function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+      <StoreCard />
       <AccountCard />
     </div>
   );

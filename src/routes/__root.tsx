@@ -120,12 +120,15 @@ function AppGate() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { configured, loading, session } = useAuth();
 
+  const isPublicStore = path === "/loja" || path.startsWith("/loja/");
+
   if (configured && loading) return <LoadingScreen />;
-  if (configured && !session && path !== "/login")
+  if (configured && !session && path !== "/login" && !isPublicStore)
     return <Navigate to="/login" replace />;
   if (configured && session && path === "/login")
     return <Navigate to="/" replace />;
   if (path === "/login") return <Outlet />;
+  if (isPublicStore) return <Outlet />;
 
   return (
     <AppShell>
